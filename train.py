@@ -12,12 +12,8 @@ from models.yolo import Model
 from utils.datasets import *
 from utils.utils import *
 
-mixed_precision = True
-try:  # Mixed precision training https://github.com/NVIDIA/apex
-    from apex import amp
-except:
-    print('Apex recommended for faster mixed precision training: https://github.com/NVIDIA/apex')
-    mixed_precision = False  # not installed
+# Force APEX off.
+mixed_precision = False  # not installed
 
 wdir = 'weights' + os.sep  # weights dir
 os.makedirs(wdir, exist_ok=True)
@@ -198,6 +194,8 @@ def train(hyp):
     # model._initialize_biases(cf.to(device))
     plot_labels(labels)
     tb_writer.add_histogram('classes', c, 0)
+
+    from apex.parallel import DistributedDataParallel
 
     # Check anchors
     check_best_possible_recall(dataset, anchors=model.model[-1].anchor_grid, thr=hyp['anchor_t'])

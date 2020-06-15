@@ -1,0 +1,3 @@
+ python train.py --cache-images --single-cls --multi-scale --data ./data/markers.yaml --cfg ./models/mc_yolo5s.yaml --weights ''
+
+ # Multi GPU has bug.
