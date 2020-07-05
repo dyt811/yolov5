@@ -184,8 +184,6 @@ def train(hyp):
         plot_labels(labels)
         tb_writer.add_histogram('classes', c, 0)
 
-    from apex.parallel import DistributedDataParallel
-
     # Check anchors
     if not opt.noautoanchor:
         check_anchors(dataset, model=model, thr=hyp['anchor_t'], imgsz=imgsz)

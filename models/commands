@@ -1,3 +1,11 @@
- python train.py --cache-images --single-cls --multi-scale --data ./data/markers.yaml --cfg ./models/mc_yolo5s.yaml --weights ''
+ python train.py --device 0 --cache-images --data ./data/gwd.yaml --cfg ./models/gwd_yolo5s.yaml --weights /home/dyt811/Git/yolov5/weights/last.pt --epochs 1150
 
  # Multi GPU has bug.
+
+ python detect.py --device 0 --source /home/dyt811/Git/data_mc/images/val --weights /home/dyt811/Git/yolov5/weights/best.pt --conf 0.1
+ python detect.py --device 0 --source /home/dyt811/Git/cvnnig/data_yolo5_mc_test_large --weights /home/dyt811/Git/yolov5/runs/Jun21_11-59-00_ArtemisIILinux/best.pt --conf 0.5
+
+
+time python detect.py --device 0 --source /home/dyt811/Git/data_external_test --weights /home/dyt811/Git/yolov5/weights/best.pt --conf 0.5
+
+ python detect.py --device 0 --source "/media/dyt811/A4FCE3EEFCE3B8A6/Git/MotionCorrect/SupportFiles/TestInputData/Hex201705/2017-11-12 Big and small copy pasted/" --weights /home/dyt811/Git/yolov5/weights/best.pt --conf 0.1
