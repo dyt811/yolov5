@@ -1,7 +1,5 @@
 import argparse
 
-import yaml
-
 from models.experimental import *
 
 
@@ -54,16 +52,22 @@ class Model(nn.Module):
                 self.md = yaml.load(f, Loader=yaml.FullLoader)  # model dict
 
         # Define model
-        if nc:
+        if nc and nc != self.md['nc']:
+            print('Overriding %s nc=%g with nc=%g' % (model_cfg, self.md['nc'], nc))
             self.md['nc'] = nc  # override yaml value
         self.model, self.save = parse_model(self.md, ch=[ch])  # model, savelist, ch_out
         # print([x.shape for x in self.forward(torch.zeros(1, ch, 64, 64))])
 
         # Build strides, anchors
         m = self.model[-1]  # Detect()
-        m.stride = torch.tensor([64 / x.shape[-2] for x in self.forward(torch.zeros(1, ch, 64, 64))])  # forward
-        m.anchors /= m.stride.view(-1, 1, 1)
-        self.stride = m.stride
+        if isinstance(m, Detect):
+            s = 128  # 2x min stride
+            m.stride = torch.tensor([s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, s, s))])  # forward
+            m.anchors /= m.stride.view(-1, 1, 1)
+            check_anchor_order(m)
+            self.stride = m.stride
+            self._initialize_biases()  # only run once
+            # print('Strides: %s' % m.stride.tolist())
 
         # Init weights, biases
         torch_utils.initialize_weights(self)
@@ -97,8 +101,11 @@ class Model(nn.Module):
                 x = y[m.f] if isinstance(m.f, int) else [x if j == -1 else y[j] for j in m.f]  # from earlier layers
 
             if profile:
-                import thop
-                o = thop.profile(m, inputs=(x,), verbose=False)[0] / 1E9 * 2  # FLOPS
+                try:
+                    import thop
+                    o = thop.profile(m, inputs=(x,), verbose=False)[0] / 1E9 * 2  # FLOPS
+                except:
+                    o = 0
                 t = torch_utils.time_synchronized()
                 for _ in range(10):
                     _ = m(x)
@@ -144,7 +151,7 @@ class Model(nn.Module):
 
 
 def parse_model(md, ch):  # model_dict, input_channels(3)
-    print('\n%3s%15s%3s%10s  %-40s%-30s' % ('', 'from', 'n', 'params', 'module', 'arguments'))
+    print('\n%3s%18s%3s%10s  %-40s%-30s' % ('', 'from', 'n', 'params', 'module', 'arguments'))
     anchors, nc, gd, gw = md['anchors'], md['nc'], md['depth_multiple'], md['width_multiple']
     na = (len(anchors[0]) // 2)  # number of anchors
     no = na * (nc + 5)  # number of outputs = anchors * (classes + 5)
@@ -159,7 +166,7 @@ def parse_model(md, ch):  # model_dict, input_channels(3)
                 pass
 
         n = max(round(n * gd), 1) if n > 1 else n  # depth gain
-        if m in [nn.Conv2d, Conv, Bottleneck, SPP, DWConv, MixConv2d, Focus, ConvPlus, BottleneckCSP]:
+        if m in [nn.Conv2d, Conv, Bottleneck, SPP, DWConv, MixConv2d, Focus, CrossConv, BottleneckCSP, C3]:
             c1, c2 = ch[f], args[0]
 
             # Normal
@@ -180,7 +187,7 @@ def parse_model(md, ch):  # model_dict, input_channels(3)
             #     c2 = make_divisible(c2, 8) if c2 != no else c2
 
             args = [c1, c2, *args[1:]]
-            if m is BottleneckCSP:
+            if m in [BottleneckCSP, C3]:
                 args.insert(2, n)
                 n = 1
         elif m is nn.BatchNorm2d:
@@ -196,7 +203,7 @@ def parse_model(md, ch):  # model_dict, input_channels(3)
         t = str(m)[8:-2].replace('__main__.', '')  # module type
         np = sum([x.numel() for x in m_.parameters()])  # number params
         m_.i, m_.f, m_.type, m_.np = i, f, t, np  # attach index, 'from' index, type, number params
-        print('%3s%15s%3s%10.0f  %-40s%-30s' % (i, f, n, np, t, args))  # print
+        print('%3s%18s%3s%10.0f  %-40s%-30s' % (i, f, n, np, t, args))  # print
         save.extend(x % i for x in ([f] if isinstance(f, int) else f) if x != -1)  # append to savelist
         layers.append(m_)
         ch.append(c2)
@@ -208,7 +215,7 @@ if __name__ == '__main__':
     parser.add_argument('--cfg', type=str, default='yolov5s.yaml', help='model.yaml')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     opt = parser.parse_args()
-    opt.cfg = glob.glob('./**/' + opt.cfg, recursive=True)[0]  # find file
+    opt.cfg = check_file(opt.cfg)  # check file
     device = torch_utils.select_device(opt.device)
 
     # Create model
@@ -218,11 +225,10 @@ if __name__ == '__main__':
     # Profile
     # img = torch.rand(8 if torch.cuda.is_available() else 1, 3, 640, 640).to(device)
     # y = model(img, profile=True)
-    # print([y[0].shape] + [x.shape for x in y[1]])
 
     # ONNX export
     # model.model[-1].export = True
-    # torch.onnx.export(model, img, f.replace('.yaml', '.onnx'), verbose=True, opset_version=11)
+    # torch.onnx.export(model, img, opt.cfg.replace('.yaml', '.onnx'), verbose=True, opset_version=11)
 
     # Tensorboard
     # from torch.utils.tensorboard import SummaryWriter
