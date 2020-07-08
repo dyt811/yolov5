@@ -1,5 +1,6 @@
 import argparse
-
+import torch
+#torch.cuda.set_enabled_lms(True)
 import torch.distributed as dist
 import torch.nn.functional as F
 import torch.optim as optim
